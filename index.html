@@ -33,16 +33,23 @@
                 <rect x="80" y="270" width="240" height="40" rx="20" fill="#FF6B00"/>
             </svg>
         </div>
-        <h1 class="text-xl font-extrabold tracking-wide text-white">Plataforma de Control Ubicaciones Bloqueadas</h1>
+        <h1 class="text-xl font-extrabold tracking-wide text-white">Plataforma de Control de Ubicaciones Bloqueadas</h1>
     </div>
 
-    <div class="flex items-center space-x-3 mt-2 sm:mt-0">
-        <label class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2 rounded-lg cursor-pointer transition shadow flex items-center space-x-2 border border-slate-700">
+    <div class="flex items-center space-x-2 mt-2 sm:mt-0">
+        <label class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-3.5 py-2 rounded-lg cursor-pointer transition shadow flex items-center space-x-2 border border-slate-700 text-sm">
             <i data-lucide="upload" class="w-4 h-4 text-orange-400"></i>
-            <span>Cargar Excel</span>
+            <span id="uploadBtnText">Cargar Excel</span>
             <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden">
         </label>
-        <button id="exportBtn" onclick="exportFilteredData()" disabled class="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition shadow flex items-center space-x-2">
+
+        <!-- Botón para Limpiar Excel Cargado y Memoria Local -->
+        <button id="clearDataBtn" onclick="clearLoadedData()" disabled class="bg-red-700 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-3.5 py-2 rounded-lg transition shadow flex items-center space-x-2 text-sm">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span>Limpiar Datos</span>
+        </button>
+
+        <button id="exportBtn" onclick="exportFilteredData()" disabled class="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-3.5 py-2 rounded-lg transition shadow flex items-center space-x-2 text-sm">
             <i data-lucide="download" class="w-4 h-4"></i>
             <span>Exportar Filtrado</span>
         </button>
@@ -227,6 +234,96 @@
     let activeProcess = 'TODOS';
     let activeLocation = null;
 
+    // --- MANEJO DE INDEXEDDB PARA ALMACENAMIENTO ILIMITADO ---
+    const DB_NAME = 'PromartStockDB';
+    const STORE_NAME = 'stock_data_store';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME);
+          }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function saveToDB(data) {
+      try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.put(data, 'current_stock');
+        return tx.complete;
+      } catch (err) {
+        console.error('Error al guardar en IndexedDB:', err);
+      }
+    }
+
+    async function loadFromDB() {
+      try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get('current_stock');
+        return new Promise((resolve) => {
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => resolve([]);
+        });
+      } catch (err) {
+        console.error('Error al leer de IndexedDB:', err);
+        return [];
+      }
+    }
+
+    async function clearDB() {
+      try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.delete('current_stock');
+        return tx.complete;
+      } catch (err) {
+        console.error('Error al borrar IndexedDB:', err);
+      }
+    }
+    // ---------------------------------------------------------
+
+    // Inicialización al cargar la página
+    document.addEventListener('DOMContentLoaded', async () => {
+      renderSidebar();
+      const savedData = await loadFromDB();
+      if (savedData && savedData.length > 0) {
+        rawData = savedData;
+        document.getElementById('exportBtn').disabled = false;
+        document.getElementById('clearDataBtn').disabled = false;
+        populateHeaderFilterDropdowns();
+        updateCounts();
+        filterData();
+      }
+    });
+
+    async function clearLoadedData() {
+      if (confirm('¿Estás seguro de que deseas borrar los datos cargados?')) {
+        rawData = [];
+        await clearDB();
+        document.getElementById('excelFileInput').value = '';
+        document.getElementById('exportBtn').disabled = true;
+        document.getElementById('clearDataBtn').disabled = true;
+
+        fillSelectOptions('colFilterArea', []);
+        fillSelectOptions('colFilterLPN', []);
+
+        resetHeaderFilters();
+        updateCounts();
+        filterData();
+      }
+    }
+
     function renderSidebar() {
       const container = document.getElementById('processMenu');
       container.innerHTML = '';
@@ -284,14 +381,22 @@
       const file = e.target.files[0];
       if (!file) return;
 
+      const uploadText = document.getElementById('uploadBtnText');
+      uploadText.innerText = 'Cargando...';
+
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = async function(evt) {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
         const firstSheet = workbook.SheetNames[0];
         rawData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
 
+        // Guardamos en IndexedDB
+        await saveToDB(rawData);
+
+        uploadText.innerText = 'Cargar Excel';
         document.getElementById('exportBtn').disabled = false;
+        document.getElementById('clearDataBtn').disabled = false;
         populateHeaderFilterDropdowns();
         updateCounts();
         filterData();
@@ -392,7 +497,6 @@
 
       let filtered = rawData;
 
-      // Filtro por sidebar (Procesos)
       if (activeProcess !== 'TODOS') {
         const procConfig = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
         if (activeLocation) {
@@ -402,7 +506,6 @@
         }
       }
 
-      // Filtros por Cabecera de Columna
       if (fArea) {
         filtered = filtered.filter(d => {
           const area = d['Area'] || d['Area del Producto'];
@@ -419,10 +522,9 @@
         filtered = filtered.filter(d => d['Nro LPN'] && String(d['Nro LPN']).trim() === fLPN);
       }
 
-      // Filtro por estado de días
       if (fDias) {
         const currentProc = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
-        const limitDays = currentProc ? currentProc.days : 30; // fallback si está en TODOS
+        const limitDays = currentProc ? currentProc.days : 30;
         const warningWindow = Math.max(2, Math.floor(limitDays * 0.20));
         const warningThreshold = limitDays - warningWindow;
 
@@ -438,7 +540,6 @@
         });
       }
 
-      // Buscador Global
       if (search) {
         filtered = filtered.filter(d =>
           (d['SKU'] && String(d['SKU']).toLowerCase().includes(search)) ||
@@ -462,7 +563,7 @@
 
       if (activeProcess === 'TODOS') {
         title.innerText = 'Todos los Registros';
-        sub.innerText = 'Mostrando la totalidad del stock cargado.';
+        sub.innerText = rawData.length > 0 ? 'Mostrando la totalidad del stock cargado.' : 'Carga un archivo Excel para comenzar.';
         limitStat.innerText = '-';
       } else {
         const procConfig = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
@@ -486,7 +587,7 @@
         tbody.innerHTML = `
           <tr>
             <td colspan="10" class="text-center py-8 text-slate-400">
-              No se encontraron registros para este filtro.
+              ${rawData.length === 0 ? 'Carga un archivo Excel para visualizar la información.' : 'No se encontraron registros para este filtro.'}
             </td>
           </tr>
         `;
@@ -554,8 +655,6 @@
       const fileName = `${activeProcess.replace(/ /g, "_")}_Stock_Filtrado.xlsx`;
       XLSX.writeFile(wb, fileName);
     }
-
-    renderSidebar();
 </script>
 </body>
 </html>
