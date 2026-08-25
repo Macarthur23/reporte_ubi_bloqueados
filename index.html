@@ -33,7 +33,7 @@
                 <rect x="80" y="270" width="240" height="40" rx="20" fill="#FF6B00"/>
             </svg>
         </div>
-        <h1 class="text-xl font-extrabold tracking-wide text-white">Plataforma de Control de Ubicaciones Bloqueadas</h1>
+        <h1 class="text-xl font-extrabold tracking-wide text-white">Plataforma de Control Ubicaciones Bloqueadas</h1>
     </div>
 
     <div class="flex items-center space-x-2 mt-2 sm:mt-0">
@@ -126,13 +126,14 @@
                         <th class="px-3 py-2">Estado</th>
                         <th class="px-3 py-2 text-right">Unidades</th>
                         <th class="px-3 py-2">Fecha Modificación</th>
-                        <th class="px-3 py-2 text-center">Días en Ubicación</th>
+                        <th class="px-3 py-2 text-center text-orange-600 font-bold flex items-center justify-center gap-1">
+                            <span>Días en Ubicación</span>
+                            <i data-lucide="arrow-down font-bold" class="w-3.5 h-3.5"></i>
+                        </th>
                     </tr>
                     <!-- Fila de Controles de Filtro -->
                     <tr class="bg-slate-50 border-b border-slate-200">
-                        <th class="p-1.5">
-                            <!-- Sin filtro para Tienda -->
-                        </th>
+                        <th class="p-1.5"></th>
                         <th class="p-1.5">
                             <select id="colFilterArea" onchange="filterData()" class="filter-select w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 appearance-none focus:ring-1 focus:ring-orange-500 font-normal">
                                 <option value="">(Todas)</option>
@@ -149,15 +150,9 @@
                                 <option value="">(Todos)</option>
                             </select>
                         </th>
-                        <th class="p-1.5">
-                            <!-- Sin filtro para Ubicación -->
-                        </th>
-                        <th class="p-1.5">
-                            <!-- Sin filtro para Estado -->
-                        </th>
-                        <th class="p-1.5 text-right">
-                            <!-- Unidades -->
-                        </th>
+                        <th class="p-1.5"></th>
+                        <th class="p-1.5"></th>
+                        <th class="p-1.5 text-right"></th>
                         <th class="p-1.5"></th>
                         <th class="p-1.5">
                             <select id="colFilterDias" onchange="filterData()" class="filter-select w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 appearance-none focus:ring-1 focus:ring-orange-500 font-normal">
@@ -189,42 +184,42 @@
 
     const PROCESS_STRUCTURE = [
       {
-        name: "Devolución al Proveedor",
+        name: "DEVOLUCIÓN AL PROVEEDOR",
         days: 30,
         locations: ["DEV-PRV-ALM-001", "DEV-PRV-SVT-001", "DEV-PRV-VIA-CD"]
       },
       {
-        name: "Administración de Servicio Técnico",
+        name: "ADMINISTRACIÓN DE SERVICIO TÉCNICO",
         days: 21,
         locations: ["ST-ALM-001-001", "ST-PROVEEDOR-001-001"]
       },
       {
-        name: "Cambio Mano a Mano de Mercadería",
+        name: "CAMBIO MANO A MANO DE MERCADERÍA",
         days: 30,
         locations: ["CMM-ALM-001-001", "CMM-PROVEEDOR-001-001"]
       },
       {
-        name: "Mercadería No Apta para la Venta",
+        name: "MERCADERÍA NO APTA PARA LA VENTA",
         days: 5,
         locations: ["NAV-TDA-001-001", "NAV-INCOMPLETO-001-001"]
       },
       {
-        name: "Administración de Mercadería por Publicidad",
+        name: "ADMINISTRACIÓN DE MERCADERÍA POR PUBLICIDAD",
         days: 30,
         locations: ["PB-ALM-001-001", "PB-PROVEEDOR-001-001"]
       },
       {
-        name: "Gestión de Mercadería con Descuento",
+        name: "GESTIÓN DE MERCADERÍA CON DESCUENTO",
         days: 45,
         locations: ["DSCTO-TDA-001-001"]
       },
       {
-        name: "Incidencias de Recepción por Transporte",
+        name: "INCIDENCIAS DE RECEPCIÓN POR TRANSPORTE",
         days: 7,
         locations: ["INC-TRANSPORTE-RECEP-DANO", "INC-TRANSPORTE-RECEP-HURTO"]
       },
       {
-        name: "Mercadería Perecible",
+        name: "MERCADERÍA PERECIBLE",
         days: 90,
         locations: ["VCTO-GESTIÓN-PERECIBLE-001"]
       }
@@ -234,7 +229,7 @@
     let activeProcess = 'TODOS';
     let activeLocation = null;
 
-    // --- MANEJO DE INDEXEDDB PARA ALMACENAMIENTO ILIMITADO ---
+    // --- MANEJO DE INDEXEDDB ---
     const DB_NAME = 'PromartStockDB';
     const STORE_NAME = 'stock_data_store';
 
@@ -291,9 +286,7 @@
         console.error('Error al borrar IndexedDB:', err);
       }
     }
-    // ---------------------------------------------------------
 
-    // Inicialización al cargar la página
     document.addEventListener('DOMContentLoaded', async () => {
       renderSidebar();
       const savedData = await loadFromDB();
@@ -336,7 +329,7 @@
           <div onclick="selectProcess('${proc.name}')" class="p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer flex justify-between items-center transition">
             <div>
               <p class="font-semibold text-xs text-slate-800">${proc.name}</p>
-              <span class="text-[10px] text-orange-600 font-bold">Límite: ${proc.days} días</span>
+              <span class="text-[10px] text-orange-600 font-bold">LÍMITE: ${proc.days} DÍAS</span>
             </div>
             <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
           </div>
@@ -391,7 +384,6 @@
         const firstSheet = workbook.SheetNames[0];
         rawData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
 
-        // Guardamos en IndexedDB
         await saveToDB(rawData);
 
         uploadText.innerText = 'Cargar Excel';
@@ -551,6 +543,20 @@
         );
       }
 
+      // --- ORDENAMIENTO DE MAYOR A MENOR POR DÍAS EN UBICACIÓN ---
+      filtered = filtered.slice().sort((a, b) => {
+        const dateA = parseSpanishDate(a['Fecha y Hora Modificación']);
+        const dateB = parseSpanishDate(b['Fecha y Hora Modificación']);
+
+        const daysA = calculateDaysInLocation(dateA);
+        const daysB = calculateDaysInLocation(dateB);
+
+        const valA = daysA !== null ? daysA : -1;
+        const valB = daysB !== null ? daysB : -1;
+
+        return valB - valA; // Orden descendente (mayor a menor)
+      });
+
       return filtered;
     }
 
@@ -563,7 +569,7 @@
 
       if (activeProcess === 'TODOS') {
         title.innerText = 'Todos los Registros';
-        sub.innerText = rawData.length > 0 ? 'Mostrando la totalidad del stock cargado.' : 'Carga un archivo Excel para comenzar.';
+        sub.innerText = rawData.length > 0 ? 'Mostrando la totalidad del stock cargado (Ordenado de mayor a menor días).' : 'Carga un archivo Excel para comenzar.';
         limitStat.innerText = '-';
       } else {
         const procConfig = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
@@ -642,6 +648,7 @@
         `;
         tbody.appendChild(tr);
       });
+      lucide.createIcons();
     }
 
     function exportFilteredData() {
