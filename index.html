@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Stock por Procesos y Ubicaciones</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS para leer y exportar Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .filter-select {
+          background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+          background-position: right 0.25rem center;
+          background-repeat: no-repeat;
+          background-size: 1em 1em;
+          padding-right: 1.25rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+
+<!-- Header en Naranja con el Isotipo de Promart -->
+<header class="bg-orange-600 text-white shadow-lg py-3.5 px-6 flex flex-wrap justify-between items-center">
+    <div class="flex items-center space-x-3">
+        <!-- Isotipo Promart SVG -->
+        <div class="w-9 h-9 flex items-center justify-center bg-black rounded-lg p-1.5 shadow-md">
+            <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                <path d="M200 108L320 206C327 212 322 223 312 223H282V230C282 236 277 241 271 241H250C244 241 239 236 239 230V206H161V230C161 236 156 241 150 241H129C123 241 118 236 118 230V223H88C78 223 73 212 80 206L200 108Z" fill="#FF6B00"/>
+                <path d="M200 100L325 200C334 207 329 221 317 221H285C279 221 275 216 275 210V188H125V210C125 216 121 221 115 221H83C71 221 66 207 75 200L200 100Z" fill="#FF6B00"/>
+                <rect x="80" y="270" width="240" height="40" rx="20" fill="#FF6B00"/>
+            </svg>
+        </div>
+        <h1 class="text-xl font-extrabold tracking-wide text-white">Plataforma de Control Ubicaciones Bloqueadas</h1>
+    </div>
+
+    <div class="flex items-center space-x-3 mt-2 sm:mt-0">
+        <label class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2 rounded-lg cursor-pointer transition shadow flex items-center space-x-2 border border-slate-700">
+            <i data-lucide="upload" class="w-4 h-4 text-orange-400"></i>
+            <span>Cargar Excel</span>
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden">
+        </label>
+        <button id="exportBtn" onclick="exportFilteredData()" disabled class="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition shadow flex items-center space-x-2">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Exportar Filtrado</span>
+        </button>
+    </div>
+</header>
+
+<div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Sidebar / Menú de Procesos y Ubicaciones -->
+    <aside class="w-full md:w-80 bg-white border-r border-slate-200 p-4 overflow-y-auto">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Procesos & Ubicaciones</h2>
+
+        <button onclick="selectProcess('TODOS')" class="w-full text-left font-semibold py-2 px-3 rounded-lg bg-orange-50 text-orange-600 mb-2 hover:bg-orange-100 transition flex justify-between items-center border border-orange-200">
+            <span>📦 Todos los Registros</span>
+            <span id="badgeAll" class="bg-orange-200 text-orange-800 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+        </button>
+
+        <div id="processMenu" class="space-y-1">
+            <!-- Generado dinámicamente -->
+        </div>
+    </aside>
+
+    <!-- Área Principal de Contenido -->
+    <main class="flex-1 p-6 overflow-y-auto space-y-6">
+
+        <!-- Panel de Selección Actual y Métricas -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Filtro Activo</span>
+                <h2 id="currentFilterTitle" class="text-2xl font-bold text-slate-800">Todos los Registros</h2>
+                <p id="currentFilterSub" class="text-xs text-slate-500 mt-1">Carga un archivo Excel para comenzar.</p>
+            </div>
+
+            <!-- Cards Informativos -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full md:w-auto">
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center">
+                    <span class="text-xs text-slate-500 font-medium">Registros</span>
+                    <p id="statCount" class="text-xl font-bold text-slate-700">0</p>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center">
+                    <span class="text-xs text-slate-500 font-medium">Unidades Total</span>
+                    <p id="statUnits" class="text-xl font-bold text-slate-700">0</p>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center col-span-2 sm:col-span-1">
+                    <span class="text-xs text-slate-500 font-medium">Tiempo Gestión</span>
+                    <p id="statLimit" class="text-xl font-bold text-slate-700">-</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de Datos con Filtros en Cabecera -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 flex-wrap gap-2">
+                <div class="flex items-center space-x-2">
+                    <h3 class="font-bold text-slate-700">Detalle de Stock</h3>
+                    <button onclick="resetHeaderFilters()" class="text-xs text-orange-600 hover:text-orange-800 underline font-medium flex items-center gap-1">
+                        <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Limpiar Filtros
+                    </button>
+                </div>
+                <input type="text" id="searchInput" placeholder="Buscar global..." oninput="filterData()" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+
+            <div class="overflow-x-auto max-h-[580px]">
+                <table class="w-full text-sm text-left text-slate-600">
+                    <thead class="text-xs uppercase bg-slate-100 text-slate-700 sticky top-0 z-10 shadow-sm">
+                    <!-- Fila de Títulos de Columna -->
+                    <tr class="border-b border-slate-200">
+                        <th class="px-3 py-2">Tienda</th>
+                        <th class="px-3 py-2">Área</th>
+                        <th class="px-3 py-2">SKU</th>
+                        <th class="px-3 py-2">Descripción</th>
+                        <th class="px-3 py-2">Nro LPN</th>
+                        <th class="px-3 py-2">Ubicación</th>
+                        <th class="px-3 py-2">Estado</th>
+                        <th class="px-3 py-2 text-right">Unidades</th>
+                        <th class="px-3 py-2">Fecha Modificación</th>
+                        <th class="px-3 py-2 text-center">Días en Ubicación</th>
+                    </tr>
+                    <!-- Fila de Controles de Filtro -->
+                    <tr class="bg-slate-50 border-b border-slate-200">
+                        <th class="p-1.5">
+                            <!-- Sin filtro para Tienda -->
+                        </th>
+                        <th class="p-1.5">
+                            <select id="colFilterArea" onchange="filterData()" class="filter-select w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 appearance-none focus:ring-1 focus:ring-orange-500 font-normal">
+                                <option value="">(Todas)</option>
+                            </select>
+                        </th>
+                        <th class="p-1.5">
+                            <input type="text" id="colFilterSKU" placeholder="Filtrar..." oninput="filterData()" class="w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 focus:ring-1 focus:ring-orange-500 font-normal">
+                        </th>
+                        <th class="p-1.5">
+                            <input type="text" id="colFilterDesc" placeholder="Filtrar..." oninput="filterData()" class="w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 focus:ring-1 focus:ring-orange-500 font-normal">
+                        </th>
+                        <th class="p-1.5">
+                            <select id="colFilterLPN" onchange="filterData()" class="filter-select w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 appearance-none focus:ring-1 focus:ring-orange-500 font-normal">
+                                <option value="">(Todos)</option>
+                            </select>
+                        </th>
+                        <th class="p-1.5">
+                            <!-- Sin filtro para Ubicación -->
+                        </th>
+                        <th class="p-1.5">
+                            <!-- Sin filtro para Estado -->
+                        </th>
+                        <th class="p-1.5 text-right">
+                            <!-- Unidades -->
+                        </th>
+                        <th class="p-1.5"></th>
+                        <th class="p-1.5">
+                            <select id="colFilterDias" onchange="filterData()" class="filter-select w-full bg-white border border-slate-300 text-slate-700 text-xs rounded px-1.5 py-1 appearance-none focus:ring-1 focus:ring-orange-500 font-normal">
+                                <option value="">(Todos)</option>
+                                <option value="vencido">⚠️ Excedido (Rojo)</option>
+                                <option value="advertencia">⚡ Por vencer (Amarillo)</option>
+                                <option value="ok">✅ A tiempo (Verde)</option>
+                            </select>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100">
+                    <tr>
+                        <td colspan="10" class="text-center py-8 text-slate-400">
+                            <i data-lucide="file-spreadsheet" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+                            Carga el archivo Excel para visualizar la información.
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    lucide.createIcons();
+
+    const PROCESS_STRUCTURE = [
+      {
+        name: "Devolución al Proveedor",
+        days: 30,
+        locations: ["DEV-PRV-ALM-001", "DEV-PRV-SVT-001", "DEV-PRV-VIA-CD"]
+      },
+      {
+        name: "Administración de Servicio Técnico",
+        days: 21,
+        locations: ["ST-ALM-001-001", "ST-PROVEEDOR-001-001"]
+      },
+      {
+        name: "Cambio Mano a Mano de Mercadería",
+        days: 30,
+        locations: ["CMM-ALM-001-001", "CMM-PROVEEDOR-001-001"]
+      },
+      {
+        name: "Mercadería No Apta para la Venta",
+        days: 5,
+        locations: ["NAV-TDA-001-001", "NAV-INCOMPLETO-001-001"]
+      },
+      {
+        name: "Administración de Mercadería por Publicidad",
+        days: 30,
+        locations: ["PB-ALM-001-001", "PB-PROVEEDOR-001-001"]
+      },
+      {
+        name: "Gestión de Mercadería con Descuento",
+        days: 45,
+        locations: ["DSCTO-TDA-001-001"]
+      },
+      {
+        name: "Incidencias de Recepción por Transporte",
+        days: 7,
+        locations: ["INC-TRANSPORTE-RECEP-DANO", "INC-TRANSPORTE-RECEP-HURTO"]
+      },
+      {
+        name: "Mercadería Perecible",
+        days: 90,
+        locations: ["VCTO-GESTIÓN-PERECIBLE-001"]
+      }
+    ];
+
+    let rawData = [];
+    let activeProcess = 'TODOS';
+    let activeLocation = null;
+
+    function renderSidebar() {
+      const container = document.getElementById('processMenu');
+      container.innerHTML = '';
+
+      PROCESS_STRUCTURE.forEach(proc => {
+        const item = document.createElement('div');
+        item.className = 'border border-slate-200 rounded-lg overflow-hidden bg-white mb-2';
+
+        item.innerHTML = `
+          <div onclick="selectProcess('${proc.name}')" class="p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer flex justify-between items-center transition">
+            <div>
+              <p class="font-semibold text-xs text-slate-800">${proc.name}</p>
+              <span class="text-[10px] text-orange-600 font-bold">Límite: ${proc.days} días</span>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+          </div>
+          <div class="bg-white border-t border-slate-100 p-1 space-y-0.5">
+            ${proc.locations.map(loc => `
+              <button onclick="selectLocation('${proc.name}', '${loc}')" class="w-full text-left text-xs py-1.5 px-3 rounded hover:bg-slate-100 text-slate-600 flex justify-between items-center">
+                <span>📍 ${loc}</span>
+                <span id="loc-badge-${loc}" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">0</span>
+              </button>
+            `).join('')}
+          </div>
+        `;
+        container.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    function parseSpanishDate(val) {
+      if (!val) return null;
+      if (val instanceof Date && !isNaN(val)) return val;
+
+      const str = String(val).trim();
+      const regexEsp = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/;
+      const match = str.match(regexEsp);
+
+      if (match) {
+        const day = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10) - 1;
+        const year = parseInt(match[3], 10);
+        const hour = match[4] ? parseInt(match[4], 10) : 0;
+        const min = match[5] ? parseInt(match[5], 10) : 0;
+        const sec = match[6] ? parseInt(match[6], 10) : 0;
+
+        return new Date(year, month, day, hour, min, sec);
+      }
+
+      const parsed = new Date(str);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    document.getElementById('excelFileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+        const firstSheet = workbook.SheetNames[0];
+        rawData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+
+        document.getElementById('exportBtn').disabled = false;
+        populateHeaderFilterDropdowns();
+        updateCounts();
+        filterData();
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    function populateHeaderFilterDropdowns() {
+      const areas = new Set();
+      const lpns = new Set();
+
+      rawData.forEach(d => {
+        const area = d['Area'] || d['Area del Producto'];
+        if (area) areas.add(String(area).trim());
+        if (d['Nro LPN']) lpns.add(String(d['Nro LPN']).trim());
+      });
+
+      fillSelectOptions('colFilterArea', Array.from(areas).sort());
+      fillSelectOptions('colFilterLPN', Array.from(lpns).sort());
+    }
+
+    function fillSelectOptions(elementId, optionsArray) {
+      const select = document.getElementById(elementId);
+      const firstOpt = select.options[0];
+      select.innerHTML = '';
+      select.appendChild(firstOpt);
+
+      optionsArray.forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        select.appendChild(opt);
+      });
+    }
+
+    function resetHeaderFilters() {
+      document.getElementById('colFilterArea').value = '';
+      document.getElementById('colFilterSKU').value = '';
+      document.getElementById('colFilterDesc').value = '';
+      document.getElementById('colFilterLPN').value = '';
+      document.getElementById('colFilterDias').value = '';
+      document.getElementById('searchInput').value = '';
+      filterData();
+    }
+
+    function selectProcess(procName) {
+      activeProcess = procName;
+      activeLocation = null;
+      filterData();
+    }
+
+    function selectLocation(procName, locName) {
+      activeProcess = procName;
+      activeLocation = locName;
+      filterData();
+    }
+
+    function updateCounts() {
+      document.getElementById('badgeAll').innerText = rawData.length;
+
+      PROCESS_STRUCTURE.forEach(proc => {
+        proc.locations.forEach(loc => {
+          const count = rawData.filter(d => d['ubicación'] && String(d['ubicación']).trim() === loc).length;
+          const badge = document.getElementById(`loc-badge-${loc}`);
+          if(badge) badge.innerText = count;
+        });
+      });
+    }
+
+    function calculateDaysInLocation(dateObj) {
+      if (!dateObj) return null;
+      const today = new Date();
+      const diffTime = today - dateObj;
+      if (diffTime < 0) return 0;
+      return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    function formatDate(dateObj) {
+      if (!dateObj) return '-';
+      return dateObj.toLocaleString('es-PE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+
+    function getFilteredDataSet() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+
+      const fArea = document.getElementById('colFilterArea').value;
+      const fSKU = document.getElementById('colFilterSKU').value.toLowerCase();
+      const fDesc = document.getElementById('colFilterDesc').value.toLowerCase();
+      const fLPN = document.getElementById('colFilterLPN').value;
+      const fDias = document.getElementById('colFilterDias').value;
+
+      let filtered = rawData;
+
+      // Filtro por sidebar (Procesos)
+      if (activeProcess !== 'TODOS') {
+        const procConfig = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
+        if (activeLocation) {
+          filtered = filtered.filter(d => d['ubicación'] && String(d['ubicación']).trim() === activeLocation);
+        } else if (procConfig) {
+          filtered = filtered.filter(d => procConfig.locations.includes(String(d['ubicación']).trim()));
+        }
+      }
+
+      // Filtros por Cabecera de Columna
+      if (fArea) {
+        filtered = filtered.filter(d => {
+          const area = d['Area'] || d['Area del Producto'];
+          return area && String(area).trim() === fArea;
+        });
+      }
+      if (fSKU) {
+        filtered = filtered.filter(d => d['SKU'] && String(d['SKU']).toLowerCase().includes(fSKU));
+      }
+      if (fDesc) {
+        filtered = filtered.filter(d => d['Descripción'] && String(d['Descripción']).toLowerCase().includes(fDesc));
+      }
+      if (fLPN) {
+        filtered = filtered.filter(d => d['Nro LPN'] && String(d['Nro LPN']).trim() === fLPN);
+      }
+
+      // Filtro por estado de días
+      if (fDias) {
+        const currentProc = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
+        const limitDays = currentProc ? currentProc.days : 30; // fallback si está en TODOS
+        const warningWindow = Math.max(2, Math.floor(limitDays * 0.20));
+        const warningThreshold = limitDays - warningWindow;
+
+        filtered = filtered.filter(d => {
+          const parsedDate = parseSpanishDate(d['Fecha y Hora Modificación']);
+          const days = calculateDaysInLocation(parsedDate);
+          if (days === null) return false;
+
+          if (fDias === 'vencido') return days > limitDays;
+          if (fDias === 'advertencia') return days >= warningThreshold && days <= limitDays;
+          if (fDias === 'ok') return days < warningThreshold;
+          return true;
+        });
+      }
+
+      // Buscador Global
+      if (search) {
+        filtered = filtered.filter(d =>
+          (d['SKU'] && String(d['SKU']).toLowerCase().includes(search)) ||
+          (d['Area'] && String(d['Area']).toLowerCase().includes(search)) ||
+          (d['Area del Producto'] && String(d['Area del Producto']).toLowerCase().includes(search)) ||
+          (d['Descripción'] && String(d['Descripción']).toLowerCase().includes(search)) ||
+          (d['Nro LPN'] && String(d['Nro LPN']).toLowerCase().includes(search)) ||
+          (d['ubicación'] && String(d['ubicación']).toLowerCase().includes(search))
+        );
+      }
+
+      return filtered;
+    }
+
+    function filterData() {
+      const filtered = getFilteredDataSet();
+
+      const title = document.getElementById('currentFilterTitle');
+      const sub = document.getElementById('currentFilterSub');
+      const limitStat = document.getElementById('statLimit');
+
+      if (activeProcess === 'TODOS') {
+        title.innerText = 'Todos los Registros';
+        sub.innerText = 'Mostrando la totalidad del stock cargado.';
+        limitStat.innerText = '-';
+      } else {
+        const procConfig = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
+        title.innerText = activeLocation ? `Ubicación: ${activeLocation}` : activeProcess;
+        sub.innerText = `Proceso: ${activeProcess} | Días de Gestión Límite: ${procConfig.days} días`;
+        limitStat.innerText = `${procConfig.days} días`;
+      }
+
+      document.getElementById('statCount').innerText = filtered.length;
+      const totalUnits = filtered.reduce((acc, curr) => acc + (Number(curr['Unidades actuales']) || 0), 0);
+      document.getElementById('statUnits').innerText = totalUnits;
+
+      renderTable(filtered);
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+
+      if (data.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="10" class="text-center py-8 text-slate-400">
+              No se encontraron registros para este filtro.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      const currentProc = PROCESS_STRUCTURE.find(p => p.name === activeProcess);
+      const limitDays = currentProc ? currentProc.days : 30;
+
+      const warningWindow = Math.max(2, Math.floor(limitDays * 0.20));
+      const warningThreshold = limitDays - warningWindow;
+
+      data.slice(0, 100).forEach(row => {
+        const rawDate = row['Fecha y Hora Modificación'];
+        const parsedDate = parseSpanishDate(rawDate);
+        const daysInLoc = calculateDaysInLocation(parsedDate);
+
+        let daysBadgeClass = 'bg-slate-100 text-slate-700';
+        if (daysInLoc !== null) {
+          if (daysInLoc > limitDays) {
+            daysBadgeClass = 'bg-red-100 text-red-700 font-bold';
+          } else if (daysInLoc >= warningThreshold) {
+            daysBadgeClass = 'bg-amber-100 text-amber-700 font-bold';
+          } else {
+            daysBadgeClass = 'bg-emerald-100 text-emerald-700';
+          }
+        }
+
+        const areaValue = row['Area'] || row['Area del Producto'] || '-';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition border-b border-slate-100';
+        tr.innerHTML = `
+          <td class="px-3 py-2 font-medium text-slate-800">${row['Tienda'] || '-'}</td>
+          <td class="px-3 py-2 font-semibold text-slate-700">${areaValue}</td>
+          <td class="px-3 py-2 font-mono text-xs">${row['SKU'] || '-'}</td>
+          <td class="px-3 py-2 max-w-xs truncate" title="${row['Descripción']}">${row['Descripción'] || '-'}</td>
+          <td class="px-3 py-2 font-mono text-xs text-orange-600 font-bold">${row['Nro LPN'] || '-'}</td>
+          <td class="px-3 py-2 font-medium">${row['ubicación'] || '-'}</td>
+          <td class="px-3 py-2">
+            <span class="px-2 py-0.5 rounded-full text-xs ${row['Estado'] === 'Located' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
+              ${row['Estado'] || '-'}
+            </span>
+          </td>
+          <td class="px-3 py-2 text-right font-bold">${row['Unidades actuales'] || 0}</td>
+          <td class="px-3 py-2 text-xs text-slate-600">${formatDate(parsedDate)}</td>
+          <td class="px-3 py-2 text-center">
+            <span class="px-2 py-0.5 rounded-full text-xs ${daysBadgeClass}">
+              ${daysInLoc !== null ? `${daysInLoc} d` : '-'}
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function exportFilteredData() {
+      const filtered = getFilteredDataSet();
+      if (!filtered.length) return;
+
+      const ws = XLSX.utils.json_to_sheet(filtered);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Stock_Filtrado");
+
+      const fileName = `${activeProcess.replace(/ /g, "_")}_Stock_Filtrado.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    }
+
+    renderSidebar();
+</script>
+</body>
+</html>
